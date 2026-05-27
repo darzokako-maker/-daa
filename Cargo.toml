@@ -2,10 +2,8 @@
 name = "nextgen-ida"
 version = "0.1.0"
 edition = "2021"
-authors = ["NextGen RE Team"]
-description = "A Next-Generation High-Performance Disassembler and Pattern Scanner"
 
 [dependencies]
-zydis = "4.0.1"
-object = "0.32.2"
+zydis = "=4.1.1"    # Sürümü tam olarak buraya kilitliyoruz
+object = "=0.32.2"  # Lifetime uyumluluğu için kilitlendi
 colored = "2.1.0"
