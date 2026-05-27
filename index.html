@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NextGen-IDA: Advanced Reverse Engineering Suite</title>
+    <style>
+        :root {
+            --bg-main: #0d0f12;
+            --bg-sidebar: #13171c;
+            --bg-card: #181d24;
+            --accent: #00ff66;
+            --accent-dim: #00b347;
+            --text-main: #e2e8f0;
+            --text-dim: #718096;
+            --border-color: #232d38;
+            --asm-addr: #4299e1;
+            --asm-opcode: #ed64a6;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* 1. ÜST MENÜ BARILARI */
+        header {
+            background-color: var(--bg-sidebar);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .window-title {
+            padding: 5px 10px;
+            font-size: 11px;
+            color: var(--text-dim);
+            border-bottom: 1px solid #1a222b;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .menu-bar {
+            display: flex;
+            padding: 5px 10px;
+            gap: 15px;
+        }
+
+        .menu-item {
+            font-size: 13px;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .menu-item:hover {
+            background-color: var(--border-color);
+            color: var(--accent);
+        }
+
+        /* 2. ANA MATRİS (3 SÜTUNLU DÜZEN) */
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Sol Sütun: Navigasyon */
+        .sidebar-left {
+            width: 260px;
+            background-color: var(--bg-sidebar);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Orta Sütun: Kod ve Akış Alanı */
+        .workspace-center {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-main);
+        }
+
+        /* Sağ Sütun: AI + Hile Motoru */
+        .sidebar-right {
+            width: 320px;
+            background-color: var(--bg-sidebar);
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+            gap: 15px;
+            overflow-y: auto;
+        }
+
+        /* MODÜL KLASÖR VE LİSTELERİ (SOL SÜTUN İÇİN) */
+        .sidebar-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-bottom: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .section-title {
+            background-color: #161b22;
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: bold;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .item-list {
+            list-style: none;
+            overflow-y: auto;
+            flex: 1;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 13px;
+        }
+
+        .item-list li {
+            padding: 6px 12px;
+            cursor: pointer;
+            border-left: 2px solid transparent;
+            transition: all 0.1s;
+        }
+
+        .item-list li:hover {
+            background-color: var(--border-color);
+            border-left-color: var(--accent);
+        }
+
+        /* SEKME SİSTEMİ (ORTA ALAN) */
+        .tabs {
+            display: flex;
+            background-color: var(--bg-sidebar);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .tab {
+            padding: 10px 20px;
+            font-size: 13px;
+            cursor: pointer;
+            border-right: 1px solid var(--border-color);
+            background-color: #11151a;
+            color: var(--text-dim);
+        }
+
+        .tab.active {
+            background-color: var(--bg-main);
+            color: var(--accent);
+            border-bottom: 2px solid var(--accent);
+            font-weight: bold;
+        }
+
+        /* ASSEMBLY VE KOD GÖRÜNÜMÜ */
+        .code-viewer {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            background-color: #090b0e;
+        }
+
+        .asm-line {
+            display: flex;
+            gap: 15px;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+
+        .asm-line:hover {
+            background-color: #161b22;
+        }
+
+        .addr { color: var(--asm-addr); width: 140px; }
+        .bytes { color: var(--text-dim); width: 120px; }
+        .mnemonic { color: var(--accent); font-weight: bold; width: 80px; }
+        .operands { color: var(--text-main); }
+
+        /* SAĞ SÜTUN: KARTLAR (AI VE PATTERN SCANNER) */
+        .panel-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .card-header {
+            font-size: 13px;
+            font-weight: bold;
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .ai-response {
+            font-size: 12px;
+            color: #b2ccd6;
+            background-color: #0f1217;
+            padding: 10px;
+            border-radius: 4px;
+            border-left: 3px solid #4299e1;
+            line-height: 1.4;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .input-group label {
+            font-size: 11px;
+            color: var(--text-dim);
+        }
+
+        input[type="text"] {
+            background-color: #0f1217;
+            border: 1px solid var(--border-color);
+            padding: 8px;
+            border-radius: 4px;
+            color: var(--accent);
+            font-family: monospace;
+            outline: none;
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--accent);
+        }
+
+        .btn {
+            background-color: var(--accent-dim);
+            color: #000;
+            border: none;
+            padding: 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background-color: var(--accent);
+        }
+
+        /* 3. ETKİLEŞİMLİ TERMİNAL / ALT KONSOL */
+        footer {
+            height: 40px;
+            background-color: var(--bg-sidebar);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #48bb78;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="window-title">
+            <span>NextGen-IDA v0.1.0 Core Engine (Zydis Powered)</span>
+            <span>MİMARİ: x86_64 | TARGET: cs2_client.dll</span>
+        </div>
+        <div class="menu-bar">
+            <div class="menu-item">📁 Dosya</div>
+            <div class="menu-item">⚙️ Analiz</div>
+            <div class="menu-item">🎯 Pattern Motoru</div>
+            <div class="menu-item">🧠 Yapay Zeka</div>
+            <div class="menu-item">📦 Eklentiler</div>
+            <div class="menu-item">🛠️ Ayarlar</div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        
+        <div class="sidebar-left">
+            <div class="sidebar-section">
+                <div class="section-title">📂 Fonksiyonlar <span>(F)</span></div>
+                <ul class="item-list">
+                    <li onclick="loadFunction('sub_14001A')">⚡ sub_14001A (WorldToScreen)</li>
+                    <li onclick="loadFunction('sub_14002B')">⚡ sub_14002B (GetPlayerHealth)</li>
+                    <li onclick="loadFunction('init_cheat')">⚡ init_cheat</li>
+                    <li onclick="loadFunction('verify_signature')">⚡ verify_signature</li>
+                </ul>
+            </div>
+            <div class="sidebar-section">
+                <div class="section-title">🔤 Yazılar (Strings) <span>(S)</span></div>
+                <ul class="item-list" style="color: #ecc94b;">
+                    <li>"LocalPlayer"</li>
+                    <li>"ViewMatrix"</li>
+                    <li>"Cheat Detected! Exiting..."</li>
+                    <li>"client.dll"</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="workspace-center">
+            <div class="tabs">
+                <div class="tab active" id="asm-tab">📑 Assembly (Zydis View)</div>
+                <div class="tab" id="c-tab">📑 Pseudo-Code (C++ Decompiler)</div>
+            </div>
+
+            <div class="code-viewer" id="code-content">
+                <div class="asm-line">
+                    <div class="addr">0x00007FFF14001A</div>
+                    <div class="bytes">48 89 5C 24</div>
+                    <div class="mnemonic">mov</div>
+                    <div class="operands">[rsp+08], rbx</div>
+                </div>
+                <div class="asm-line">
+                    <div class="addr">0x00007FFF14001E</div>
+                    <div class="bytes">48 89 74 24</div>
+                    <div class="mnemonic">mov</div>
+                    <div class="operands">[rsp+10], rsi</div>
+                </div>
+                <div class="asm-line">
+                    <div class="addr">0x00007FFF140022</div>
+                    <div class="bytes">57</div>
+                    <div class="mnemonic">push</div>
+                    <div class="operands">rdi</div>
+                </div>
+                <div class="asm-line">
+                    <div class="addr">0x00007FFF140023</div>
+                    <div class="bytes">48 83 EC 20</div>
+                    <div class="mnemonic">sub</div>
+                    <div class="operands">rsp, 20</div>
+                </div>
+                <div class="asm-line">
+                    <div class="addr">0x00007FFF140027</div>
+                    <div class="bytes">33 CO</div>
+                    <div class="mnemonic">xor</div>
+                    <div class="operands">eax, eax</div>
+                </div>
+                <div class="asm-line">
+                    <div class="addr">0x00007FFF140029</div>
+                    <div class="bytes">48 8B D9</div>
+                    <div class="mnemonic">mov</div>
+                    <div class="operands">rbx, rcx</div>
+                </div>
+                <div class="asm-line">
+                    <div class="addr">0x00007FFF14002C</div>
+                    <div class="bytes">85 D2</div>
+                    <div class="mnemonic">test</div>
+                    <div class="operands">edx, edx</div>
+                </div>
+                <div class="asm-line">
+                    <div class="addr">0x00007FFF14002E</div>
+                    <div class="bytes">74 05</div>
+                    <div class="mnemonic">jz</div>
+                    <div class="operands">0x00007FFF140035</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar-right">
+            
+            <div class="panel-card">
+                <div class="card-header">🧠 Yerel Yapay Zeka Analizi</div>
+                <div class="ai-response" id="ai-text">
+                    Lütfen sol panelden analiz etmek istediğiniz bir fonksiyon seçin. AI motoru kodu otomatik yorumlayacaktır.
+                </div>
+            </div>
+
+            <div class="panel-card">
+                <div class="card-header">🎯 Ofset / Signature Hunter</div>
+                <div class="input-group">
+                    <label>Arama Kalıbı (Hex Pattern / Wildcard):</label>
+                    <input type="text" id="pattern-input" value="48 89 5C 24 ? 48 83 EC">
+                </div>
+                <button class="btn" onclick="triggerPatternScan()">Pattern'ı Tüm Bellekte Tara</button>
+                <div id="scan-result" style="font-size: 12px; font-family: monospace; color: #48bb78; margin-top: 5px;"></div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <footer>
+        [+] Core Engine Status: READY | Zydis Decoder v4.0 loaded successfully. 3412 functions indexed.
+    </footer>
+
+    <script>
+        // Fonksiyon tıklandığında simüle edilmiş kod yükleme ve AI tetikleme mekanizması
+        function loadFunction(funcName) {
+            const codeViewer = document.getElementById('code-content');
+            const aiText = document.getElementById('ai-text');
+            
+            if (funcName === 'sub_14001A') {
+                aiText.innerHTML = "<b>Fonksiyon Türü:</b> Grafik / Matematik<br><br><b>Analiz Raporu:</b> Bu fonksiyon, 3 boyutlu oyun dünyasındaki oyuncu koordinatlarını (X, Y, Z) alıp ekran matrisiyle çarparak 2 boyutlu ekran koordinatına çeviren <b>WorldToScreen</b> fonksiyonudur. ESP Box çizdirmek için bu fonksiyonun ofseti şarttır.";
+            } else if (funcName === 'sub_14002B') {
+                aiText.innerHTML = "<b>Fonksiyon Türü:</b> Oyuncu Durumu (Entity)<br><br><b>Analiz Raporu:</b> Bu fonksiyon yerel oyuncunun veya düşmanların can (Health) değerini çeken fonksiyondur. İçerideki <code>mov eax, [rcx+0xAC]</code> komutu can değerinin struct içindeki ofsetinin <b>0xAC</b> olduğunu gösteriyor.";
+            } else {
+                aiText.innerHTML = "Seçilen '" + funcName + "' fonksiyonunun Assembly yapısı karmaşık dallanmalar içeriyor. Döngüler ve logic bypass noktaları aranıyor...";
+            }
+        }
+
+        // Hile Ofset Arama Simülasyonu
+        function triggerPatternScan() {
+            const pattern = document.getElementById('pattern-input').value;
+            const resultDiv = document.getElementById('scan-result');
+            resultDiv.innerHTML = "⏳ Tarama yapılıyor...";
+            
+            setTimeout(() => {
+                resultDiv.innerHTML = "🎯 [TARGET ACQUIRED]<br>Eşleşme Bulundu: <span style='color:#00ff66; font-weight:bold;'>0x00007FFF14001A</span>";
+            }, 800);
+        }
+    </script>
+</body>
+                      </html>
+                      
