@@ -56,7 +56,7 @@ fn main() {
         }
     };
 
-    // 1. DISASSEMBLER MODÜLÜ (Zydis v4.x En Güncel Standart)
+    // 1. DISASSEMBLER MODÜLÜ (Zydis v4.x Kararlı API Entegrasyonu)
     println!("\n{}", "[*] Analyzing .text / Code Section...".bold().blue());
     if let Some(text_section) = obj_file.section_by_name(".text") {
         if let Ok(code_data) = text_section.data() {
@@ -73,18 +73,19 @@ fn main() {
                 let current_slice = &code_data[offset..];
                 
                 if let Ok(Some(instruction)) = decoder.decode_first(current_slice) {
+                    // KESİN ÇÖZÜM: v4.x mimarisinde formatlama işlemi için statik byte dizisi yerine 
+                    // kütüphanenin resmi 'OutputBuffer' yapısı ve standart 'format_instruction' metodu kullanılır.
                     let mut buffer = [0u8; 256];
+                    let mut formatter_buffer = zydis::OutputBuffer::new(&mut buffer[..]);
                     
-                    // KRİTİK HATA ÇÖZÜMÜ: Zydis 4.x mimarisinde ham instruction formatlama 
-                    // doğrudan formatter.format_instruction_ex veya güvenli ara yüzler ile yapılır.
-                    if let Ok(string_output) = formatter.format_instruction_ex(
-                        &instruction,
-                        &mut buffer,
-                        Some(base_address + offset as u64),
+                    if formatter.format_instruction(
+                        &instruction, 
+                        &mut formatter_buffer, 
+                        Some(base_address + offset as u64), 
                         None
-                    ) {
+                    ).is_ok() {
                         let va = base_address + offset as u64;
-                        println!("  0x{:016X}:  {}", va, string_output);
+                        println!("  0x{:016X}:  {}", va, formatter_buffer);
                     }
                     
                     offset += instruction.length as usize;
@@ -187,4 +188,4 @@ mod tests {
         let result = scan_pattern(&raw_data, &pattern);
         assert_eq!(result, Some(vec![2]));
     }
-    }
+        }
