@@ -56,21 +56,19 @@ fn main() {
         }
     };
 
-    // 1. DISASSEMBLER MODÜLÜ (Zydis v4.x Standartlarına Göre Tamir Edildi)
+    // 1. DISASSEMBLER MODÜLÜ
     println!("\n{}", "[*] Analyzing .text / Code Section...".bold().blue());
     if let Some(text_section) = obj_file.section_by_name(".text") {
         if let Ok(code_data) = text_section.data() {
             println!("[+] Found .text section (Size: {} bytes)", code_data.len().to_string().green());
             
             let decoder = Decoder::new(machine_mode, stack_width).unwrap();
-            // HATA 1 ÇÖZÜMÜ: Zydis 4.x üzerinde Formatter::new metodu Result dönmez, unwrap kaldırıldı.
             let formatter = Formatter::new(FormatterStyle::INTEL);
             
             let mut offset = 0;
             let mut count = 0;
             let base_address = text_section.address();
 
-            // HATA 2 ÇÖZÜMÜ: Zydis v4.x decode döngüsü 'decode_first' ile hatasız ve platform bağımsız hale getirildi
             while offset < code_data.len() && count < 20 {
                 let current_slice = &code_data[offset..];
                 
@@ -175,11 +173,12 @@ fn scan_pattern(data: &[u8], pattern: &[Option<u8>]) -> Option<Vec<usize>> {
 mod tests {
     use super::*;
 
-    @test
+    // HATA DÜZELTİLDİ: @test yerine olması gereken #[test] makrosu getirildi.
+    #[test]
     fn test_exact_pattern_matching() {
         let raw_data = vec![0x90, 0x55, 0x48, 0x89, 0xE5, 0xB8, 0x01, 0x00, 0x00, 0x00, 0x5D, 0xC3];
         let pattern = parse_hex_pattern("48 89 E5").unwrap();
         let result = scan_pattern(&raw_data, &pattern);
         assert_eq!(result, Some(vec![2]));
     }
-    }
+            }
