@@ -1,19 +1,19 @@
-name: NextGen IDA Build & Release
+name: NextGen IDA CI/CD Core Pipeline
 
 on:
   push:
     branches: [ "main" ]
-    tags: [ "v*" ] # v1.0.0 gibi etiketlerde otomatik release yapar
+    tags: [ "v*" ] # v1.0.0 gibi bir tag pushlandığında otomatik Release tetikler
   pull_request:
     branches: [ "main" ]
 
 jobs:
   build:
-    name: Build on ${{ matrix.os }}
+    name: Build & Test Core on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false # Bir platform hata alsa bile diğer platformların derlenmesini durdurmaz
       matrix:
-        # Aynı anda 3 işletim sisteminde de derliyoruz
         os: [ubuntu-latest, windows-latest, macos-latest]
         include:
           - os: windows-latest
@@ -27,43 +27,62 @@ jobs:
             asset_name: nextgen-ida-macos
 
     steps:
-    - name: Kodu Klonla
+    - name: Checkout Code Repository
       uses: actions/checkout@v4
 
-    # Eğer Rust kullanıyorsan Rust derleyicisini kurar (C++ ise CMake kurulabilir)
-    - name: Rust Geliştirme Ortamını Kur
+    - name: Setup Highly Optimized Rust Toolchain
       uses: dtolnay/rust-toolchain@stable
 
-    - name: Kod Testlerini Çalıştır
+    - name: Cargo Cache Setup (Derlemeleri Maksimum Hıza Ulaştırır)
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ matrix.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ matrix.os }}-cargo-
+
+    - name: Run Disassembler & Signature Engine Tests (Zydis v4 Testi)
       run: cargo test --verbose
 
-    - name: Programı Optimize Edilmiş Olarak Derle
+    - name: Compile High-Performance Release Binary (Optimize Derleme)
       run: cargo build --release
 
-    # Derlenen binary dosyasını GitHub Actions paneline yükler
-    - name: Çıktıyı Kaydet (Upload Artifact)
+    - name: Stash Artifact for Deployment (Dosyaları Paketle)
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.asset_name }}
         path: target/release/${{ matrix.artifact_name }}
 
-  # Eğer yeni bir sürüm etiketi (v1.0.0 gibi) girildiyse otomatik indirme sayfası açar
   release:
-    name: Create GitHub Release
+    name: Production Release Deployment
     needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') # Sadece tag atıldığında çalışır
     runs-on: ubuntu-latest
     steps:
-    - name: Tüm Derlenen Dosyaları İndir
+    - name: Download Multi-Platform Binaries
       uses: actions/download-artifact@v4
 
-    - name: GitHub Release Oluştur ve Dosyaları Yükle
+    - name: Generate Automated GitHub Release Notes & Upload Binaries
       uses: softprops/action-gh-release@v2
       with:
         files: |
-          nextgen-ida-windows/nextgen-ida.exe
+          nextgen-ida-windows.exe/nextgen-ida.exe
           nextgen-ida-linux/nextgen-ida
           nextgen-ida-macos/nextgen-ida
+        body: |
+          # NextGen IDA Core Engine Production Release
+          
+          ## Deployed Capabilities:
+          - **Ultra-Fast x86/x64 Disassembly Engine**: Fully powered by Zydis v4.x Engine.
+          - **Multi-Segment Signature Scanner**: Advanced pattern hunter with wildcard (`?`) functionality.
+          - **Cross-Platform Compilation**: Native builds generated for Windows (.exe), Linux, and macOS.
+          
+          *Compiled, thoroughly tested, and verified through automated GitHub Actions pipelines.*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         
