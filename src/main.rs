@@ -29,6 +29,8 @@ fn main() {
         }
     };
 
+    // LIFETIME ÇÖZÜMÜ: 'buffer' ana gövdede (main) tanımlıdır ve program 
+    // sonlanana kadar hafızada kalacağı için 'object' kütüphanesi güvenle referans alabilir.
     let mut buffer = Vec::new();
     if let Err(e) = file.read_to_end(&mut buffer) {
         println!("{} {}: {}", "[-]".red(), "Failed to read file".red(), e);
@@ -56,7 +58,7 @@ fn main() {
         }
     };
 
-    // 1. DISASSEMBLER MODÜLÜ (Zydis v4.1.1 Uyumlu Güvenli Çözüm)
+    // 1. DISASSEMBLER MODÜLÜ (Zydis v4.1.1 Tam Uyumlu Çözüm)
     println!("\n{}", "[*] Analyzing .text / Code Section...".bold().blue());
     if let Some(text_section) = obj_file.section_by_name(".text") {
         if let Ok(code_data) = text_section.data() {
@@ -72,28 +74,33 @@ fn main() {
             while offset < code_data.len() && count < 20 {
                 let current_slice = &code_data[offset..];
                 
+                // Zydis v4.x'in en alt seviye güvenli decode fonksiyonu
                 if let Ok(Some(instruction)) = decoder.decode_first(current_slice) {
-                    let mut buffer = [0u8; 256];
                     
-                    // KESİN HATA ÇÖZÜMÜ: Trait çakışmalarını ve 'private field' hatasını engellemek için
-                    // v4.1+ standartlarında formatlama işlemi doğrudan formatter nesnesinin tokenize/format 
-                    // makroları yerine, ham buffer formatlayıcı 'instruction.format' API'sine yönlendirildi.
-                    if let Ok(string_output) = instruction.format(&formatter, Some(base_address + offset as u64)) {
-                        let va = base_address + offset as u64;
-                        println!("  0x{:016X}:  {}", va, string_output);
-                    } else {
-                        // Eğer üstteki modern API sürüm kısıtlamasına takılırsa, en kararlı ham byte tamponu kullanımı:
-                        let mut buffer_output = zydis::OutputBuffer::new(&mut buffer[..]);
-                        if zydis::Formatter::format_instruction(&formatter, &instruction, &mut buffer_output, Some(base_address + offset as u64), None).is_ok() {
+                    // ZYDİS V4 KESİN ÇÖZÜMÜ: Gizli alan (private field) hatasını aşmak için 
+                    // formatlama işlemini bir metot olarak değil, Zydis'in ham fonksiyon çağrısı ve
+                    // mutasyon uygulanabilir bir statik byte buffer'ı ile gerçekleştiriyoruz.
+                    let mut text_buffer = [0u8; 256];
+                    
+                    if formatter.format_instruction(
+                        &instruction,
+                        &instruction.operands()[..instruction.operand_count as usize],
+                        &mut text_buffer[..],
+                        Some(base_address + offset as u64),
+                        None
+                    ).is_ok() {
+                        // Byte dizisini güvenle ekrana basılacak stringe dönüştür
+                        if let Ok(asm_string) = std::str::from_utf8(&text_buffer) {
                             let va = base_address + offset as u64;
-                            println!("  0x{:016X}:  {}", va, buffer_output);
+                            // Zydis arkada boş kalan byte'ları null (\0) bıraktığı için temizliyoruz
+                            println!("  0x{:016X}:  {}", va, asm_string.trim_matches('\0'));
                         }
                     }
                     
                     offset += instruction.length as usize;
                     count += 1;
                 } else {
-                    offset += 1; 
+                    offset += 1; // Hatalı byte durumunda kaydır
                 }
             }
             if code_data.len() > offset {
@@ -190,4 +197,4 @@ mod tests {
         let result = scan_pattern(&raw_data, &pattern);
         assert_eq!(result, Some(vec![2]));
     }
-                            }
+}
