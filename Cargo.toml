@@ -6,9 +6,9 @@ authors = ["NextGen RE Team"]
 description = "A Next-Generation High-Performance Disassembler and Pattern Scanner"
 
 [dependencies]
-# Zydis is the fastest and most modern x86/x64 disassembler engine
-zydis = "4.0.0"
-# Object crate allows parsing PE, ELF, and Mach-O headers cleanly
+# Zydis motorunun en kararlı sürümü
+zydis = "4.0.1"
+# PE (.exe/.dll) formatlarını ayrıştırmak için
 object = "0.32.2"
-# Colored output for terminal UI / logging
+# Terminal çıktılarını renklendirmek için
 colored = "2.1.0"
