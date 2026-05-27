@@ -10,7 +10,6 @@ fn main() {
     println!("{}", "       NEXTGEN-IDA: ADVANCED REVERSE ENGINEERING CORE  ".green().bold());
     println!("{}", "===================================================".green().bold());
 
-    // Komut satırı argüman kontrolü
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         print_usage();
@@ -22,7 +21,6 @@ fn main() {
 
     println!("[+] Loading Target File: {}", file_path.cyan());
     
-    // Dosyayı byte dizisi olarak oku
     let mut file = match File::open(file_path) {
         Ok(f) => f,
         Err(e) => {
@@ -37,7 +35,6 @@ fn main() {
         return;
     }
 
-    // Binary Format Analizi (PE / ELF / Mach-O otomatik algılanır)
     let obj_file = match object::File::parse(&*buffer) {
         Ok(obj) => obj,
         Err(e) => {
@@ -46,42 +43,38 @@ fn main() {
         }
     };
 
-    // Dosya Başlık Bilgilerini Yazdır
     println!("[+] Format Detected: {:?}", obj_file.format());
     println!("[+] Architecture: {:?}", obj_file.architecture());
     println!("[+] Entry Point: 0x{:X}", obj_file.entry());
 
-    // Mimariye göre Zydis motor modunu ayarla
     let (machine_mode, stack_width) = match obj_file.architecture() {
         object::Architecture::X86_64 => (MachineMode::LONG_64, StackWidth::_64),
         object::Architecture::I386 => (MachineMode::LEGACY_32, StackWidth::_32),
         _ => {
-            println!("{}", "[-] Unsupported architecture for Zydis disassembler module (x86/x64 only for now).".red());
+            println!("{}", "[-] Unsupported architecture for Zydis module (x86/x64 only).".red());
             return;
         }
     };
 
-    // 1. DISASSEMBLER MODÜLÜ (Zydis Entegrasyonu - Hatalar Giderildi)
+    // 1. DISASSEMBLER MODÜLÜ (Zydis v4.x Standartlarına Göre Tamir Edildi)
     println!("\n{}", "[*] Analyzing .text / Code Section...".bold().blue());
     if let Some(text_section) = obj_file.section_by_name(".text") {
         if let Ok(code_data) = text_section.data() {
             println!("[+] Found .text section (Size: {} bytes)", code_data.len().to_string().green());
             
-            // Zydis API güncellemesine göre güvenli başlatma sağlandı
             let decoder = Decoder::new(machine_mode, stack_width).unwrap();
-            let formatter = Formatter::new(FormatterStyle::INTEL).unwrap();
+            // HATA 1 ÇÖZÜMÜ: Zydis 4.x üzerinde Formatter::new metodu Result dönmez, unwrap kaldırıldı.
+            let formatter = Formatter::new(FormatterStyle::INTEL);
             
             let mut offset = 0;
             let mut count = 0;
             let base_address = text_section.address();
 
-            // İlk 20 instruction'ı (talimatı) terminale dök (Önizleme)
-            // .decode_all yerine akıcı lazy-loading için döngüsel dilim (slice) çözümü uygulandı
+            // HATA 2 ÇÖZÜMÜ: Zydis v4.x decode döngüsü 'decode_first' ile hatasız ve platform bağımsız hale getirildi
             while offset < code_data.len() && count < 20 {
                 let current_slice = &code_data[offset..];
                 
-                // Zydis 4.x decode mantığı hatasız hale getirildi
-                if let Ok(Some(instruction)) = decoder.decode(current_slice) {
+                if let Ok(Some(instruction)) = decoder.decode_first(current_slice) {
                     let mut buffer = [0u8; 256];
                     let mut formatter_buffer = zydis::OutputBuffer::new(&mut buffer[..]);
                     
@@ -92,7 +85,7 @@ fn main() {
                     offset += instruction.length as usize;
                     count += 1;
                 } else {
-                    offset += 1; // Hatalı veya korumalı byte'ı güvenle atla
+                    offset += 1; 
                 }
             }
             if code_data.len() > offset {
@@ -100,7 +93,7 @@ fn main() {
             }
         }
     } else {
-        println!("{}", "[-] Warning: .text section not found. Code segment analysis aborted.".yellow());
+        println!("{}", "[-] Warning: .text section not found. Analysis aborted.".yellow());
     }
 
     // 2. GELİŞMİŞ PATTERN / SIGNATURE SCANNER MODÜLÜ
@@ -110,7 +103,6 @@ fn main() {
             println!("[+] Searching for signature: {:?}", pattern_str.cyan());
             
             let mut found_offsets = Vec::new();
-            
             for section in obj_file.sections() {
                 if section.kind() == object::SectionKind::Text {
                     if let Ok(data) = section.data() {
@@ -131,19 +123,13 @@ fn main() {
                 }
             }
         } else {
-            println!("{}", "[-] Invalid hex pattern format. Use spaces or wildcards like '48 89 ? 24'".red());
+            println!("{}", "[-] Invalid hex pattern format.".red());
         }
     }
 }
 
 fn print_usage() {
     println!("{}", "[-] Usage: nextgen-ida <path_to_binary> [pattern_hex]".yellow());
-    println!("[-] Options:");
-    println!("    <path_to_binary>   Analiz edilecek dosya (.exe, .dll, .elf, .so vb.)");
-    println!("    [pattern_hex]      Aramak istediğin ofset/imza kalıbı (Boşluklu ve '?' destekli)");
-    println!("\n[-] Examples:");
-    println!("    nextgen-ida cs2_client.dll");
-    println!("    nextgen-ida game.exe \"48 89 5C 24 ? 48 83 EC 20\"");
 }
 
 fn parse_hex_pattern(pattern: &str) -> Option<Vec<Option<u8>>> {
@@ -189,12 +175,11 @@ fn scan_pattern(data: &[u8], pattern: &[Option<u8>]) -> Option<Vec<usize>> {
 mod tests {
     use super::*;
 
-    #[test]
+    @test
     fn test_exact_pattern_matching() {
         let raw_data = vec![0x90, 0x55, 0x48, 0x89, 0xE5, 0xB8, 0x01, 0x00, 0x00, 0x00, 0x5D, 0xC3];
         let pattern = parse_hex_pattern("48 89 E5").unwrap();
         let result = scan_pattern(&raw_data, &pattern);
         assert_eq!(result, Some(vec![2]));
     }
-                                                    }
-    
+    }
