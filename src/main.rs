@@ -56,7 +56,7 @@ fn main() {
         }
     };
 
-    // 1. DISASSEMBLER MODÜLÜ
+    // 1. DISASSEMBLER MODÜLÜ (Zydis v4.x En Güncel Standart)
     println!("\n{}", "[*] Analyzing .text / Code Section...".bold().blue());
     if let Some(text_section) = obj_file.section_by_name(".text") {
         if let Ok(code_data) = text_section.data() {
@@ -74,12 +74,19 @@ fn main() {
                 
                 if let Ok(Some(instruction)) = decoder.decode_first(current_slice) {
                     let mut buffer = [0u8; 256];
-                    let mut formatter_buffer = zydis::OutputBuffer::new(&mut buffer[..]);
                     
-                    if formatter.format_instruction(&instruction, &mut formatter_buffer, Some(base_address + offset as u64), None).is_ok() {
+                    // KRİTİK HATA ÇÖZÜMÜ: Zydis 4.x mimarisinde ham instruction formatlama 
+                    // doğrudan formatter.format_instruction_ex veya güvenli ara yüzler ile yapılır.
+                    if let Ok(string_output) = formatter.format_instruction_ex(
+                        &instruction,
+                        &mut buffer,
+                        Some(base_address + offset as u64),
+                        None
+                    ) {
                         let va = base_address + offset as u64;
-                        println!("  0x{:016X}:  {}", va, formatter_buffer);
+                        println!("  0x{:016X}:  {}", va, string_output);
                     }
+                    
                     offset += instruction.length as usize;
                     count += 1;
                 } else {
@@ -173,7 +180,6 @@ fn scan_pattern(data: &[u8], pattern: &[Option<u8>]) -> Option<Vec<usize>> {
 mod tests {
     use super::*;
 
-    // HATA DÜZELTİLDİ: @test yerine olması gereken #[test] makrosu getirildi.
     #[test]
     fn test_exact_pattern_matching() {
         let raw_data = vec![0x90, 0x55, 0x48, 0x89, 0xE5, 0xB8, 0x01, 0x00, 0x00, 0x00, 0x5D, 0xC3];
@@ -181,4 +187,4 @@ mod tests {
         let result = scan_pattern(&raw_data, &pattern);
         assert_eq!(result, Some(vec![2]));
     }
-            }
+    }
