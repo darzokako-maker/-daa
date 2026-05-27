@@ -6,9 +6,6 @@ authors = ["NextGen RE Team"]
 description = "A Next-Generation High-Performance Disassembler and Pattern Scanner"
 
 [dependencies]
-# Zydis motorunun en kararlı sürümü
 zydis = "4.0.1"
-# PE (.exe/.dll) formatlarını ayrıştırmak için
 object = "0.32.2"
-# Terminal çıktılarını renklendirmek için
 colored = "2.1.0"
