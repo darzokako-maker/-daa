@@ -1,0 +1,69 @@
+name: NextGen IDA Build & Release
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*" ] # v1.0.0 gibi etiketlerde otomatik release yapar
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # Aynı anda 3 işletim sisteminde de derliyoruz
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: windows-latest
+            artifact_name: nextgen-ida.exe
+            asset_name: nextgen-ida-windows.exe
+          - os: ubuntu-latest
+            artifact_name: nextgen-ida
+            asset_name: nextgen-ida-linux
+          - os: macos-latest
+            artifact_name: nextgen-ida
+            asset_name: nextgen-ida-macos
+
+    steps:
+    - name: Kodu Klonla
+      uses: actions/checkout@v4
+
+    # Eğer Rust kullanıyorsan Rust derleyicisini kurar (C++ ise CMake kurulabilir)
+    - name: Rust Geliştirme Ortamını Kur
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Kod Testlerini Çalıştır
+      run: cargo test --verbose
+
+    - name: Programı Optimize Edilmiş Olarak Derle
+      run: cargo build --release
+
+    # Derlenen binary dosyasını GitHub Actions paneline yükler
+    - name: Çıktıyı Kaydet (Upload Artifact)
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.asset_name }}
+        path: target/release/${{ matrix.artifact_name }}
+
+  # Eğer yeni bir sürüm etiketi (v1.0.0 gibi) girildiyse otomatik indirme sayfası açar
+  release:
+    name: Create GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+    - name: Tüm Derlenen Dosyaları İndir
+      uses: actions/download-artifact@v4
+
+    - name: GitHub Release Oluştur ve Dosyaları Yükle
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          nextgen-ida-windows/nextgen-ida.exe
+          nextgen-ida-linux/nextgen-ida
+          nextgen-ida-macos/nextgen-ida
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
