@@ -2,7 +2,8 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 use object::{Object, ObjectSection};
-use zydis::{Decoder, Formatter, FormatterStyle, MachineMode, StackWidth};
+// Zydis v4 için gerekli olan tüm struct ve enum'lar
+use zydis::{Decoder, Formatter, FormatterStyle, MachineMode, StackWidth, OutputBuffer};
 use colored::*;
 
 fn main() {
@@ -29,15 +30,13 @@ fn main() {
         }
     };
 
-    // LIFETIME ÇÖZÜMÜ: 'buffer' ana gövdede (main) tanımlıdır ve program 
-    // sonlanana kadar hafızada kalacağı için 'object' kütüphanesi güvenle referans alabilir.
     let mut buffer = Vec::new();
     if let Err(e) = file.read_to_end(&mut buffer) {
         println!("{} {}: {}", "[-]".red(), "Failed to read file".red(), e);
         return;
     }
 
-    let obj_file = match object::File::parse(&*buffer) {
+    let obj_file = match object::File::parse(buffer.as_slice()) {
         Ok(obj) => obj,
         Err(e) => {
             println!("{} {}: {}", "[-]".red(), "Failed to parse binary format".red(), e);
@@ -58,49 +57,42 @@ fn main() {
         }
     };
 
-    // 1. DISASSEMBLER MODÜLÜ (Zydis v4.1.1 Tam Uyumlu Çözüm)
+    // 1. DISASSEMBLER MODÜLÜ
     println!("\n{}", "[*] Analyzing .text / Code Section...".bold().blue());
     if let Some(text_section) = obj_file.section_by_name(".text") {
         if let Ok(code_data) = text_section.data() {
             println!("[+] Found .text section (Size: {} bytes)", code_data.len().to_string().green());
             
             let decoder = Decoder::new(machine_mode, stack_width).unwrap();
-            let formatter = Formatter::new(FormatterStyle::INTEL);
+            let formatter = Formatter::new(FormatterStyle::INTEL).unwrap();
             
             let mut offset = 0;
             let mut count = 0;
             let base_address = text_section.address();
 
+            // v4 API formatlama tamponu (Olası en uzun instruction için 256 byte yeterlidir)
+            let mut buffer_arr = [0u8; 256];
+            let mut output_buffer = OutputBuffer::new(&mut buffer_arr[..]);
+
             while offset < code_data.len() && count < 20 {
                 let current_slice = &code_data[offset..];
                 
-                // Zydis v4.x'in en alt seviye güvenli decode fonksiyonu
                 if let Ok(Some(instruction)) = decoder.decode_first(current_slice) {
+                    let va = base_address + offset as u64;
+
+                    output_buffer.clear();
                     
-                    // ZYDİS V4 KESİN ÇÖZÜMÜ: Gizli alan (private field) hatasını aşmak için 
-                    // formatlama işlemini bir metot olarak değil, Zydis'in ham fonksiyon çağrısı ve
-                    // mutasyon uygulanabilir bir statik byte buffer'ı ile gerçekleştiriyoruz.
-                    let mut text_buffer = [0u8; 256];
-                    
-                    if formatter.format_instruction(
-                        &instruction,
-                        &instruction.operands()[..instruction.operand_count as usize],
-                        &mut text_buffer[..],
-                        Some(base_address + offset as u64),
-                        None
-                    ).is_ok() {
-                        // Byte dizisini güvenle ekrana basılacak stringe dönüştür
-                        if let Ok(asm_string) = std::str::from_utf8(&text_buffer) {
-                            let va = base_address + offset as u64;
-                            // Zydis arkada boş kalan byte'ları null (\0) bıraktığı için temizliyoruz
-                            println!("  0x{:016X}:  {}", va, asm_string.trim_matches('\0'));
-                        }
+                    // KESİN ÇÖZÜM: format_instruction metodunun private alan adıyla çakışmasını 
+                    // engellemek için doğrudan genişletilmiş API olan format_instruction_ex çağrılmıştır.
+                    // Son parametre (None) UserData (kullanıcı verisi) taşımadığımızı belirtir.
+                    if formatter.format_instruction_ex(&instruction, &mut output_buffer, Some(va), None).is_ok() {
+                        println!("  0x{:016X}:  {}", va, output_buffer);
                     }
                     
                     offset += instruction.length as usize;
                     count += 1;
                 } else {
-                    offset += 1; // Hatalı byte durumunda kaydır
+                    offset += 1; 
                 }
             }
             if code_data.len() > offset {
