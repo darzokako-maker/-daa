@@ -56,7 +56,7 @@ fn main() {
         }
     };
 
-    // 1. DISASSEMBLER MODÜLÜ (Zydis v4.x Kararlı API Entegrasyonu)
+    // 1. DISASSEMBLER MODÜLÜ (Zydis v4.1.1 Uyumlu Güvenli Çözüm)
     println!("\n{}", "[*] Analyzing .text / Code Section...".bold().blue());
     if let Some(text_section) = obj_file.section_by_name(".text") {
         if let Ok(code_data) = text_section.data() {
@@ -73,19 +73,21 @@ fn main() {
                 let current_slice = &code_data[offset..];
                 
                 if let Ok(Some(instruction)) = decoder.decode_first(current_slice) {
-                    // KESİN ÇÖZÜM: v4.x mimarisinde formatlama işlemi için statik byte dizisi yerine 
-                    // kütüphanenin resmi 'OutputBuffer' yapısı ve standart 'format_instruction' metodu kullanılır.
                     let mut buffer = [0u8; 256];
-                    let mut formatter_buffer = zydis::OutputBuffer::new(&mut buffer[..]);
                     
-                    if formatter.format_instruction(
-                        &instruction, 
-                        &mut formatter_buffer, 
-                        Some(base_address + offset as u64), 
-                        None
-                    ).is_ok() {
+                    // KESİN HATA ÇÖZÜMÜ: Trait çakışmalarını ve 'private field' hatasını engellemek için
+                    // v4.1+ standartlarında formatlama işlemi doğrudan formatter nesnesinin tokenize/format 
+                    // makroları yerine, ham buffer formatlayıcı 'instruction.format' API'sine yönlendirildi.
+                    if let Ok(string_output) = instruction.format(&formatter, Some(base_address + offset as u64)) {
                         let va = base_address + offset as u64;
-                        println!("  0x{:016X}:  {}", va, formatter_buffer);
+                        println!("  0x{:016X}:  {}", va, string_output);
+                    } else {
+                        // Eğer üstteki modern API sürüm kısıtlamasına takılırsa, en kararlı ham byte tamponu kullanımı:
+                        let mut buffer_output = zydis::OutputBuffer::new(&mut buffer[..]);
+                        if zydis::Formatter::format_instruction(&formatter, &instruction, &mut buffer_output, Some(base_address + offset as u64), None).is_ok() {
+                            let va = base_address + offset as u64;
+                            println!("  0x{:016X}:  {}", va, buffer_output);
+                        }
                     }
                     
                     offset += instruction.length as usize;
@@ -188,4 +190,4 @@ mod tests {
         let result = scan_pattern(&raw_data, &pattern);
         assert_eq!(result, Some(vec![2]));
     }
-        }
+                            }
